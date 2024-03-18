@@ -9,7 +9,7 @@ import threading
 
 # This was an exercise for a class to build a trading algorithm
 # That could listen to a data stream and execute trades (via Alpaca)
-# Based onn some naive strategy
+# Based onn some naive strategy using live data
 
 # In this case, we're trading BTC based on signals from two moving averages
 
