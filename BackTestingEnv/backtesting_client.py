@@ -1,95 +1,76 @@
-import socketserver
-import time
+import socket
 import pandas as pd
-import os
 import re
-from datetime import datetime
-import algo_trading_strat_1
+from io import StringIO
+from algo_trading_strat_1 import Trader
+import time
 
-# provide a directory of files that will be used simulate real time data
-# for now, file names must include ticker, type, date in that order
-# for now, files must be xlsx
-# use regex to specify format
-# specify interval between sent data in seconds in cycle
+HOST, PORT = "localhost", 9999
 
-symbols = '{}()[].,:;+-*/&|<>=~$1234567890_'
+# types: singlerows - will receive single rows, dataframes - will receive whole dfs
+type = 'singlerows'
 
+# parameters sent to server upon connection
+data_structure = 'multi files linked' # 1 if reading single file, 0 if reading several files
+cycle = .001 # interval of time between server outputs in seconds
+directory = r"E:/Stocks/AAPL/".replace("\\","/") 
+regex = '^([A-z]{1,5})(_)([A-z]{0,10})(_)([0-9-; ]{0,25})(.[A-z]{0,10})'
+regex_last_bar = "^({[\s\S]*})*({[^{}]*})$"
+date_form = '%Y-%m-%d %H;%M;%S'
 
-class MyTCPHandler(socketserver.BaseRequestHandler):
-    # Mimics an exchange streaming market data
+# depending on the cycle length, the trader may miss some of the data sent by the server
+# this counts rows lost
+total_lost = 0
+
+t1 = time.time()
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+
+    # connect and send parameters to server
+    sock.connect((HOST, PORT))
+    config = str({'data_structure': data_structure, 'cycle': cycle, 'directory': directory, 'regex': regex, 'date_form': date_form})
+    sock.sendall(bytes(config, "utf-8"))
+    print("sent info")
+
+    # create trader
+    # see algo_trading_strat_1 for this class in AlgoTrading
+    trader = Trader(10000, 'AAPL', 5, 90)
+
+    i = 0
+    while True:
+        if i % 10000 == 0:
+            print(trader.get_wealth())
+        i += 1
+        try:
+            if type == 'dataframes':
+                received = str(sock.recv(8192), "utf-8")
+                a = pd.read_json(StringIO(received))
+        
+            elif type == 'singlerows':
+                received = str(sock.recv(8192), "utf-8")
+                matches = re.findall(regex_last_bar, received)
+                last_bar = matches[0][-1]
+                lost = len(matches[0]) - 2 if len(matches[0][0]) == 0 else len(matches[0]) - 1
+                total_lost += lost
+                a = pd.read_json(StringIO(last_bar), typ='series')
+                a = a.to_frame()
+
+                # here data is given to the trader to make a decision
+                trader.generate_signal(a.T)
+
+        except Exception as e:
+            # these prints are for debugging
+            print(e)
+            print(received)
+            print(matches)
+            break
+
+# time it took to complete
+t2 = time.time()
+print(t2-t1)
+
+# Cash + value of holdings by the end of simulation
+print(trader.get_wealth())
+
+print(total_lost)
     
-    def fname_parser(self, fn, regex, as_string, date_form):
-        # parses filenames
-        matches = re.findall(regex, fn)
-        matches = [m for m in matches[0] if m not in symbols]
-        if as_string:
-            return {'fn':fn, 'ticker':matches[0], 'date':matches[2], 'type':matches[1], 'file_ext':matches[3]}
-        else:
-            return {'fn':fn, 'ticker':matches[0], 'date':datetime.strptime(matches[2], date_form), 'type':matches[1], 'file_ext':matches[3]}
-
-    def handle(self):
-        config = self.request.recv(1024).strip()
-        config_dict = eval(config)
-        cycle = config_dict['cycle']
-        data_structure = config_dict['data_structure']
-        directory = config_dict['directory']
-        regex = config_dict['regex']
-        date_form = config_dict['date_form']
-
-        if data_structure == 'one file':
-            # data is in one file, delivered row by row
-            dir = os.listdir(directory)
-            dir = [file for file in dir if file[0] != '~']
-            fn = dir[0]
-            fn_path = directory + '/' + fn
-            data = pd.read_excel(fn_path)
-            for i in data.index:
-                row = data.loc[i].to_json()
-                df_json = bytes(row, 'utf-8')
-                self.request.sendall(df_json)
-                time.sleep(cycle)
-
-        elif data_structure == 'multi files linked':
-            # data is in multiple files in single directory
-            # delivered row by row
-            dir = os.listdir(directory)
-            dir = [file for file in dir if file[0] != '~']
-            dir_parsed = [self.fname_parser(fn, regex, False, date_form) for fn in dir]
-            dir_parsed.sort(key=lambda x: x['date'])
-
-            for file in dir_parsed:
-                fn = file['fn']
-                fn_path = directory + '/' + fn
-                data = pd.read_excel(fn_path)
-                for i in data.index:
-                    row = data.loc[i].to_json()
-                    df_json = bytes(row, 'utf-8')
-                    self.request.sendall(df_json)
-                    time.sleep(cycle)
-
-        elif data_structure == 'multi files separate':
-            # data is in multiple files
-            # full dataframes delivered sheet by sheet
-            dir = os.listdir(directory)
-            dir = [file for file in dir if file[0] != '~']
-            dir_parsed = [self.fname_parser(fn, regex, False, date_form) for fn in dir]
-            dir_parsed.sort(key=lambda x: x['date'])
-
-            for file in dir_parsed:
-                fn = file['fn']
-                fn_path = directory + '/' + fn
-                try:
-                    xls = pd.ExcelFile(fn_path)
-                    for sheet in xls.sheet_names:
-                        df = pd.read_excel(xls, sheet).drop(columns=['Unnamed: 0', 'Last Trade Date', 'Change', '% Change'])
-                        df_json = bytes(df.to_json(), 'utf-8')
-                        self.request.sendall(df_json)
-                        time.sleep(.01)
-                except:
-                    break
-                time.sleep(cycle)
-
-if __name__ == "__main__":
-    HOST, PORT = "localhost", 9999 #localhost or 127.0.0.1
-    with socketserver.TCPServer((HOST, PORT), MyTCPHandler) as server:
-        server.serve_forever()
