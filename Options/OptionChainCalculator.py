@@ -64,6 +64,8 @@ class OptionChain:
         return -S*np.exp(-q*T)*norm.cdf(-D1) + K*np.exp(-r*T)*norm.cdf(-D2)
     
     def vega(self, vol, S, K, r, q, T, op_price, op_style):
+        # edited version of euro_vega to accept same paramters
+        # as zero functions for use with scipy.optimize
         D1 = self.d1(S, K, r, q, vol, T)
         return S*np.exp(-q*T)*norm.pdf(D1)*np.sqrt(T)
 
@@ -193,7 +195,7 @@ class OptionChain:
     def implied_vol(self, S, K, r, q, T, op_price, op_style):
         # Calculated implied vol using Newton's method
         if self.type == 'A':
-            init = np.sqrt((2*np.log(S*np.exp(r*T)/K))/(T))
+            # init = np.sqrt((2*np.log(S*np.exp(r*T)/K))/(T))
             try:
                 imp_vol = optimize.newton(self.zero_amer, 2, args = (S, K, r, q, T, op_price, op_style))
             except Exception as e:
