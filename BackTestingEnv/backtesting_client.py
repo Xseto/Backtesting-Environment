@@ -33,7 +33,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
     print("sent info")
 
     # create trader
-    # see algo_trading_strat_1 for this class in AlgoTrading
+    # see backtest_trad_strat_1 for this class in AlgoTrading
     trader = Trader(10000, 'AAPL', 5, 90)
 
     i = 0
