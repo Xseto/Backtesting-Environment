@@ -7,6 +7,12 @@ from collections import deque
 from alpaca.data.live import CryptoDataStream
 import threading
 
+# This was an exercise for a class to build a trading algorithm
+# That could listen to a data stream and execute trades (via Alpaca)
+# Based onn some naive strategy
+
+# In this case, we're trading BTC based on signals from two moving averages
+
 client = TradingClient(config.API_KEY, config.SECRET_KEY, paper=True)
 account = dict(client.get_account())
 
@@ -65,7 +71,7 @@ def algo_trader():
             action = False
             print("No Trade Made")
 
-        # Put in order if strategy indicates it's appropriate
+        # Put in order if strategy gives the signal
         if action:
             order_details = MarketOrderRequest(
             symbol= "BTC/USD",
@@ -103,8 +109,8 @@ def trade_results():
                 cash_received += qty*price
                 qty_owned_this_session -= qty
             
-            
             print("Estimated Pnl:", cash_received - cash_spent + qty_owned_this_session*price)
+            
     trades = TradingStream(config.API_KEY, config.SECRET_KEY, paper=True)
     trades.subscribe_trade_updates(trade_status)
     trades.run()
@@ -117,4 +123,4 @@ t2.start()
 t1.join()
 t2.join()
 
-# Terminal must be manually killed for now
+# To exit, terminal must be manually killed for now
