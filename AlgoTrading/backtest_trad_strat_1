@@ -1,0 +1,87 @@
+import pandas as pd
+import numpy as np
+from collections import deque
+
+# Trader class implementing strategy similar to that found in 
+# algo_trad_strat_1
+# This class is meant to be used with the backtesting client
+# in BackTestingEnv
+
+class Trader:
+    def __init__(self, cash, tickers, short_memory, long_memory):
+        self.tickers = tickers
+        self.holdings = {} # updated in transactions
+        self.cash = cash # updated in transactions
+        self.val_holdings = {} # updated in generate_signal
+        self.holdings_to_cash = 0 # updated in update_pnl
+        self.wealth = self.cash + self.holdings_to_cash # updated in update_pnl
+
+        self.moving_average = 0
+        self.short_mem_bid = deque(maxlen=short_memory)
+        self.long_mem_bid = deque(maxlen=long_memory)
+        self.short_mem_ask = deque(maxlen=short_memory)
+        self.long_mem_ask = deque(maxlen=long_memory)
+
+    def transaction(self, cash_change, holding, position):
+        # update cash and holdings post transaction
+        self.cash += cash_change
+        
+        if holding in self.holdings.keys():
+            self.holdings[holding] += position
+        else:
+            self.holdings[holding] = 0
+            self.holdings[holding] += position
+        
+        self.update_pnl()
+
+    def update_pnl(self):
+      # update profits and losses post transaction
+      
+        temp_cash = 0
+
+        for key in self.holdings:
+            if self.holdings[key] > 0:
+                temp_cash += self.holdings[key]*self.val_holdings[key]
+
+        self.holdings_to_cash = temp_cash
+        self.wealth = self.cash + self.holdings_to_cash
+        #print('current wealth is', self.cash, self.holdings_to_cash, self.holdings)
+
+    def generate_signal(self, data):
+        # Receive data and make a trade decision
+        # This is where you'd implement a strategy
+
+        spread = 0.001
+        ticker = data['symbol'][0]
+        current_bid = data['close'][0]*(1-spread)
+        current_ask = data['close'][0]*(1+spread)
+
+        self.short_mem_bid.append(current_bid)
+        self.long_mem_bid.append(current_bid)
+        self.short_mem_ask.append(current_ask)
+        self.long_mem_ask.append(current_ask)
+
+        ma_sm_bid = sum(self.short_mem_bid)/len(self.short_mem_bid)
+        ma_lm_bid = sum(self.long_mem_bid)/len(self.long_mem_bid)
+        ma_sm_ask = sum(self.short_mem_ask)/len(self.short_mem_ask)
+        ma_lm_ask = sum(self.long_mem_ask)/len(self.long_mem_ask)
+
+        if (current_ask < self.cash) & (current_ask < ma_sm_bid < ma_lm_bid):
+            action = 2 #pos = buy, neg = sell
+        elif (current_ask < self.cash) & (current_ask < ma_sm_bid):
+            action = 1
+        elif (current_bid > ma_sm_ask) & (current_bid > ma_lm_ask):
+            action = -self.holdings[ticker]
+        else:
+            action = 0
+
+        cost = -action * current_ask if action >= 0 else -action * current_bid
+        
+        self.val_holdings[ticker] = data['close'][0]
+
+        self.transaction(cost, ticker, action)
+
+    def get_wealth(self):
+        # get method, technically unnecessary in python
+        return self.wealth
+
