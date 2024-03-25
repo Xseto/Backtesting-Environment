@@ -6,7 +6,7 @@ This is a repository of code for my class and personal projects.
 
 -Options: code relating to options and volatility
 
--NeuralNetworks: *soon to be added*
+-NeuralNetworks: implementations of neural networks in the context of finance and NLP
 
 These are not individual projects, but rather components of projects so there
 may be dependencies across folders.
