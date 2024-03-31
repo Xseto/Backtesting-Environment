@@ -5,12 +5,17 @@ import re
 from Greeks import get_greeks
 
 class OptionPortfolio:
-
+    '''This class stores options and calculates their greeks,
+        keeping track of individual and portfolio greeks.
+        Every time an option is added, all the greeks are updated.
+        If spot, rate, or div yield change, the update_portfolio_greeks
+        method has to be manually called.'''
+    
     def __init__(self, ticker, spot, rate, div, today):
         self.ticker = ticker
-        self.s = spot
-        self.r = rate
-        self.q = div
+        self.s = spot # dollar
+        self.r = rate # decimal
+        self.q = div # decimal
         self.portfolio = {}
         self.portfolio_greeks = np.zeros((7,))
         self.option_greeks = pd.DataFrame()
@@ -25,6 +30,7 @@ class OptionPortfolio:
                 'type':matches[0][2], 'strike':float(matches[0][3])/1000}
 
     def update_portfolio_greeks(self):
+        # goes through every option in the portfolio and updates the greeks
         self.portfolio_greeks = np.zeros((7,))
         option_greeks_list = []
         options = list(self.portfolio.keys())
@@ -50,6 +56,8 @@ class OptionPortfolio:
         self.option_greeks = pd.DataFrame(option_greeks_list, columns=columns)
 
     def add_option(self, id, price, side):
+        # adds option to portfolio
+        # must provide the contract name, market price and side ("Buy" or "Sell")
         profile = self.op_contract_dec(id)
         tte = (profile['date'] - self.today).days/365
         self.portfolio[id] = {'price': price, 'strike': profile['strike'], 'tte': tte, 'exp': profile['date'], 
@@ -58,6 +66,8 @@ class OptionPortfolio:
         self.update_portfolio_greeks()
 
     def remove_option(self, id):
+        # removes option from portfolio based on contract name
+        # added for readability and symmetry with add_option method
         del self.portfolio[id]
 
         self.update_portfolio_greeks()
