@@ -54,6 +54,7 @@ def euro_vanna(S, K, r, q, vol, T):
     return -np.exp(-q*T)*norm.pdf(D1)*D2/vol
 
 def euro_theta(S, K, r, q, vol, T, type):
+    # euro theta
     D1 = d1(S, K, r, q, vol, T)
     D2 = d2(S, K, r, q, vol, T, D1)
 
@@ -65,6 +66,7 @@ def euro_theta(S, K, r, q, vol, T, type):
     return -one - c*(two - three)
 
 def implied_vol(V, S, K, r, q, expiration, type):
+    # implied vol assuming euro payoff
     if type == 'C':
         po = Option.Call
     else:
@@ -82,7 +84,7 @@ def implied_vol(V, S, K, r, q, expiration, type):
     return option.impliedVolatility(V, process, 1.0e-4, 1000, 1e-7, 10)
 
 def get_greeks(V, S, K, r, q, T, expiration, type, as_array=True):
-
+    # calculates all of the greeks above and returns them as an array or dict
     imp_vol = implied_vol(V, S, K, r, q, expiration, type)
     delta = ec_delta(S, K, r, q, imp_vol, T) if type == 'C' else ep_delta(S, K, r, q, imp_vol, T)
     gamma = euro_gamma(S, K, r, q, imp_vol, T)
