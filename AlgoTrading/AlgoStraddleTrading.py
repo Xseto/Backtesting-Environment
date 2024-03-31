@@ -1,3 +1,18 @@
+''' This is an exercise in using an LSTM neural-network in algo trading.
+    Realistically, the LSTM signal should be one of many to inform a trade decision,
+    however it is the only signal in this script. 
+    The LSTM in this strategy uses the daily vol of the previous 7 days to predict
+    the daily vol of the next 3 days. If the predicted realized vol is higher than 
+    the implied vols of a call and put of an ATM straddle, we long that straddle. 
+    This algorithm does not hold options to maturity and does not maintain the initial
+    delta-neutral position of the straddle. In a perfect world, this strategy would 
+    pay little theta and have minimal exposure to rho due to the short time frame the
+    positions are held and would profit from vol exposure. Lots of improvements can be
+    made.
+    
+    The LSTM, Greeks module, and OptionPortfolio module can be found in the option
+    and neural network folders'''
+
 import os
 os.chdir(r'C:\Users\Xzavier\Documents\SpringIEOR\PersonalProject'.replace('\\', '/'))
 import sys
@@ -23,6 +38,7 @@ from OptionPortfolio import OptionPortfolio
 import schedule
 import time
 
+# Connect to Alpaca platform
 api_key = config.API_KEY
 secret_key = config.SECRET_KEY
 
@@ -34,7 +50,7 @@ option_historical_data_client = OptionHistoricalDataClient(api_key, secret_key, 
 all_straddles = []
 
 def sell_old_straddles():
-    # Sell straddles older than day limit
+    # Sell straddles older than 3 day limit
     for straddle in all_straddles:
         straddle['days_left'] -= 1
         
@@ -85,6 +101,7 @@ def predict_vol():
     return pred_vol
 
 def get_option_chain():
+    # retrieves option chain from Alpaca
     
     req = OptionChainRequest(underlying_symbol='NVDA')
     chain = option_historical_data_client.get_option_chain(req)
@@ -92,7 +109,9 @@ def get_option_chain():
     return chain
 
 def identify_undervalued_straddles(pred_vol, chain):
-
+    # look for straddles in the option chain at implied vols lower
+    # than the predicted realized vol
+    
     calls = [call for call in list(chain.keys()) if call[10] == 'C']
     st = datetime.today() - timedelta(days = 7)
     et = datetime.today()
@@ -138,10 +157,9 @@ def identify_undervalued_straddles(pred_vol, chain):
                 print('Moneyness:', strike/S)
                 print('Price:', call_price)
 
-        #print(port.option_greeks)
         call_vol = port.option_greeks['Implied Vol'][0]
         put_vol = port.option_greeks['Implied Vol'][1]
-        if (call_vol < pred_vol/1) and (put_vol < pred_vol/1):
+        if (call_vol < pred_vol/100) and (put_vol < pred_vol/100):
             undervalued_straddles.append({'call_id': call, 'put_id': put, 'call_price': call_price, 
                                             'put_price': put_price,'greeks': port.portfolio_greeks,
                                             'days_left': 3})
@@ -171,6 +189,8 @@ def buy_target_straddles(target_straddles):
         res = trade_client.submit_order(req)
 
 def straddle_trading():
+    # straddle trading process
+    
     sell_old_straddles()
     pred_vol = predict_vol()
     chain = get_option_chain()
@@ -178,11 +198,15 @@ def straddle_trading():
 
     # filter out straddles with large deltas
     target_straddles = [strad for strad in undervalued_straddles if np.abs(strad['greeks'][1]*1e3) < 10]
+    
     print('Predicted Vol:', pred_vol)
     print('Put in market orders for:', target_straddles)
+    
     buy_target_straddles(target_straddles)
 
-schedule.every().day.at("05:16").do(straddle_trading)
+# Execute strategy every day at market open
+# Must turn off on days when the market is closed
+schedule.every().day.at("09:30").do(straddle_trading)
 
 while True:
     schedule.run_pending()
